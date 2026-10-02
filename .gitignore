@@ -1,0 +1,26 @@
+# environments and caches
+.venv*/
+.native/
+.x86/
+.compile/
+__pycache__/
+*.egg-info/
+.DS_Store
+
+# third-party checkouts (clone them yourself, see README): libedgetpu (firmware + register map), edgetpu (compiler oracle), edgetpuxray
+ref/
+# the tinygrad checkout the examples and the CORAL backend run against (see README)
+tinygrad-src/
+
+# model weights (downloaded or trained), calibration caches, test sets
+models/
+
+# hardware session outputs, device lock and hung marker
+bench/hw_session/
+bench/hw_session.log
+.coral.lock
+.coral.hung
+
+# local tooling, not part of the project
+.claude/
+video/

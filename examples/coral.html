@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tinycoral</title>
+<style>
+:root { --bg:#0d1117; --panel:#151b23; --line:#2a3340; --text:#e6edf3; --muted:#8b949e; --accent:#3fb950; --accent2:#58a6ff; --warn:#d29922;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f6f8fa; --panel:#ffffff; --line:#d0d7de; --text:#1f2328; --muted:#59636e; --accent:#1a7f37; --accent2:#0969da; --warn:#9a6700; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+header { display:flex; align-items:center; gap:14px; padding:14px 22px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+header h1 { font-size:18px; margin:0; font-family:var(--mono); letter-spacing:.5px; }
+.badge { font:12px var(--mono); padding:3px 8px; border:1px solid var(--line); border-radius:20px; color:var(--muted); }
+.badge.on { color:var(--accent); border-color:var(--accent); }
+main { display:grid; grid-template-columns: minmax(0,1fr) 340px; gap:18px; padding:18px 22px; max-width:1500px; margin:0 auto; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; padding:14px 16px; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+.tabs { display:flex; gap:6px; margin-bottom:12px; }
+.tabs button { flex:none; }
+button { background:transparent; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+button.active { border-color:var(--accent2); color:var(--accent2); }
+button:disabled { opacity:.5; cursor:default; }
+select { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:4px 6px; font:inherit; }
+textarea { width:100%; min-height:70px; resize:vertical; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; font:16px/1.5 Georgia, serif; }
+.row { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin:10px 0; color:var(--muted); font-size:13px; }
+.row label { display:flex; gap:8px; align-items:center; }
+#story { font:18px/1.7 Georgia, serif; white-space:pre-wrap; min-height:260px; margin-top:12px; }
+#story .prompt { color:var(--muted); }
+#story .cursor { display:inline-block; width:9px; height:1.1em; background:var(--accent); vertical-align:text-bottom; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity:0; } }
+#grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:8px; margin-top:12px; }
+.card { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:12px/1.45 Georgia, serif; height:150px; overflow:hidden; position:relative; }
+.card::after { content:""; position:absolute; left:0; right:0; bottom:0; height:30px; background:linear-gradient(transparent, var(--bg)); }
+.card .p { color:var(--muted); }
+.stat { display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--line); font-size:13px; color:var(--muted); }
+.stat b { color:var(--text); font:600 15px var(--mono); }
+#toks { font:700 46px/1 var(--mono); color:var(--accent); }
+#spark { width:100%; height:46px; display:block; margin:6px 0 10px; }
+h3 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:16px 0 8px; }
+#tiles { display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; }
+.tile { aspect-ratio:1; border:1px solid var(--line); border-radius:6px; position:relative; overflow:hidden; background:var(--bg); }
+.tile span { position:absolute; top:3px; left:5px; font:10px var(--mono); color:var(--muted); z-index:1; }
+.seg { position:absolute; left:0; right:0; opacity:.85; }
+.seg.rsv { opacity:1; background: repeating-linear-gradient(45deg, transparent 0 4px, var(--line) 4px 6px); }
+.legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; font:11px var(--mono); color:var(--muted); }
+.legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+.note { font-size:12px; color:var(--muted); margin-top:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>tinycoral</h1>
+  <span class="badge on" id="dev">connecting…</span>
+  <span class="badge">TinyStories-15M · uint8 on a $60 USB Edge TPU</span>
+  <span class="badge">programs: our own code generator · edgetpu_compiler: not used</span>
+</header>
+<main>
+  <section class="panel">
+    <div class="tabs">
+      <button id="tWrite" class="active">Write</button>
+      <button id="tFactory">Story factory</button>
+    </div>
+    <div id="write">
+      <textarea id="prompt">Once upon a time, there was a little robot named Coral. It lived in a tiny box and</textarea>
+      <div class="row">
+        <label>temperature <input id="temp" type="range" min="0" max="1.2" step="0.05" value="0.7"><b id="tempv">0.70</b></label>
+        <label>length <input id="len" type="range" min="20" max="240" step="10" value="160"><b id="lenv">160</b></label>
+        <button class="primary" id="go">Write with the TPU</button>
+      </div>
+      <div id="story"></div>
+    </div>
+    <div id="factory" hidden>
+      <div class="row">
+        <label>temperature <input id="ftemp" type="range" min="0" max="1.2" step="0.05" value="0.6"><b id="ftempv">0.60</b></label>
+        <label>stories <select id="fbatch"><option>64</option><option>128</option><option selected>256</option></select></label>
+        <button class="primary" id="fgo">Start</button>
+        <span>every decoding step runs all stories through the Edge TPU at once</span>
+      </div>
+      <div id="grid"></div>
+    </div>
+  </section>
+  <aside class="panel">
+    <div style="color:var(--muted);font-size:13px">tokens / second</div>
+    <div id="toks">–</div>
+    <canvas id="spark"></canvas>
+    <div class="stat">ms per decoding step <b id="ms">–</b></div>
+    <div class="stat">batch <b id="batch">–</b></div>
+    <div class="stat">TPU programs per step <b id="calls">–</b></div>
+    <div class="stat">USB host → TPU per step <b id="tod">–</b></div>
+    <div class="stat">USB TPU → host per step <b id="fromd">–</b></div>
+    <div class="stat">tokens generated <b id="total">0</b></div>
+    <h3>Weights in the 16 tiles (512 KiB each)</h3>
+    <div id="tiles"></div>
+    <div class="legend" id="legend"></div>
+    <div class="note">Each tile keeps its share of the 6.3 MB of weights resident; only activations cross the USB link. The classifier's
+      32 000-word vocabulary streams in as an "image" and only block maxima come back (batch ≥ 64).</div>
+  </aside>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const KIB = v => v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + " MB" : (v / 1024).toFixed(1) + " KB";
+let busy = false, total = 0, hist = [], prompts = [];
+const COLORS = {qkv: "#58a6ff", wo: "#bc8cff", ffn: "#3fb950", cls: "#d29922"};
+
+function setTab(w) {
+  $("write").hidden = !w; $("factory").hidden = w;
+  $("tWrite").classList.toggle("active", w); $("tFactory").classList.toggle("active", !w);
+  loadTiles(w ? 1 : +$("fbatch").value);
+}
+$("tWrite").onclick = () => setTab(true);
+$("tFactory").onclick = () => setTab(false);
+for (const [r, v] of [["temp", "tempv"], ["len", "lenv"], ["ftemp", "ftempv"]]) $(r).oninput = () => $(v).textContent = (+$(r).value).toFixed(r === "len" ? 0 : 2);
+
+function spark() {
+  const c = $("spark"), g = c.getContext("2d"), w = c.width = c.clientWidth * devicePixelRatio, h = c.height = c.clientHeight * devicePixelRatio;
+  g.clearRect(0, 0, w, h);
+  if (hist.length < 2) return;
+  const mx = Math.max(...hist) * 1.1;
+  g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent"); g.lineWidth = 2 * devicePixelRatio; g.beginPath();
+  hist.forEach((v, i) => { const x = i / (hist.length - 1) * w, y = h - v / mx * h; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+  g.stroke();
+}
+
+function stats(ev, B) {
+  $("toks").textContent = Math.round(ev.tok_s).toLocaleString();
+  $("ms").textContent = ev.ms.toFixed(1); $("batch").textContent = B; $("calls").textContent = ev.tpu_calls;
+  $("tod").textContent = KIB(ev.to_device); $("fromd").textContent = KIB(ev.from_device);
+  total += ev.deltas.filter(d => d).length; $("total").textContent = total.toLocaleString();
+  hist.push(ev.tok_s); if (hist.length > 120) hist.shift(); spark();
+}
+
+async function stream(body, onEvent) {
+  const r = await fetch("/api/generate", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const {value, done} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 2); if (line.startsWith("data: ")) onEvent(JSON.parse(line.slice(6))); }
+  }
+}
+
+$("go").onclick = async () => {
+  if (busy) return; busy = true; $("go").disabled = $("fgo").disabled = true; hist = [];
+  const p = $("prompt").value.trim();
+  const st = $("story"); st.innerHTML = ""; const pe = document.createElement("span"); pe.className = "prompt"; pe.textContent = p;
+  const out = document.createElement("span"), cur = document.createElement("span"); cur.className = "cursor";
+  st.append(pe, out, cur);
+  await stream({prompt: p, steps: +$("len").value, temperature: +$("temp").value}, ev => { out.textContent += ev.deltas[0]; stats(ev, 1); });
+  cur.remove(); busy = false; $("go").disabled = $("fgo").disabled = false;
+};
+
+$("fgo").onclick = async () => {
+  if (busy) return; busy = true; $("go").disabled = $("fgo").disabled = true; hist = [];
+  const grid = $("grid"); grid.innerHTML = "";
+  const B = +$("fbatch").value, ps = prompts.slice(0, B);
+  loadTiles(B);
+  const cards = ps.map(p => { const c = document.createElement("div"); c.className = "card"; const s = document.createElement("span"); s.className = "p"; s.textContent = p;
+    const o = document.createElement("span"); c.append(s, o); grid.append(c); return o; });
+  await stream({prompts: ps, steps: 150, temperature: +$("ftemp").value}, ev => { ev.deltas.forEach((d, i) => { if (d) cards[i].textContent += d; }); stats(ev, B); });
+  busy = false; $("go").disabled = $("fgo").disabled = false;
+};
+
+async function loadTiles(B) {
+  const {tiles, limit} = await (await fetch("/api/tiles?B=" + B)).json(), el = $("tiles"); el.innerHTML = "";
+  tiles.forEach((regs, t) => {
+    const d = document.createElement("div"); d.className = "tile"; d.innerHTML = `<span>${t}</span>`;
+    const rsv = document.createElement("div"); rsv.className = "seg rsv"; rsv.style.bottom = (limit / 524288 * 100) + "%"; rsv.style.top = "0";
+    rsv.title = `program buffers: ${KIB(524288 - limit)}`; d.append(rsv);
+    regs.forEach(r => { const kind = r.name.split(".").pop(), s = document.createElement("div"); s.className = "seg";
+      s.style.bottom = (r.start / 524288 * 100) + "%"; s.style.height = Math.max(1, (r.end - r.start) / 524288 * 100) + "%";
+      s.style.background = COLORS[kind] || "#8b949e"; s.title = `${r.name}: ${KIB(r.end - r.start)} at ${KIB(r.start)}`; d.append(s); });
+    el.append(d);
+  });
+  $("legend").innerHTML = Object.entries({qkv: "q·k·v", wo: "attention out", ffn: "FFN block", cls: "classifier tokens"}).map(([k, v]) => `<span><i style="background:${COLORS[k]}"></i>${v}</span>`).join("") +
+    `<span><i style="background:repeating-linear-gradient(45deg, transparent 0 2px, var(--muted) 2px 3px)"></i>program buffers</span>`;
+}
+
+(async () => {
+  const info = await (await fetch("/api/info")).json();
+  $("dev").textContent = "device " + info.device; prompts = info.prompts;
+  loadTiles(1);
+})();
+</script>
+</body>
+</html>
