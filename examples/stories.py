@@ -181,7 +181,8 @@ if __name__ == "__main__":
   tok = Tokenizer(ROOT / "models/tokenizer.bin", cfg["vocab_size"])
   model = build(cfg, weights, nn.Linear, jit=True)
   if not args.float: coralize(model, cfg, weights, args.calib, tok)
-  print(f"device {Device.DEFAULT}, {'float' if args.float else 'uint8 matmuls on the Edge TPU'}")
+  where = "in numpy (MOCKCORAL)" if os.getenv("MOCKCORAL") else "on the Edge TPU"
+  print(f"device {Device.DEFAULT}, {'float' if args.float else f'uint8 matmuls {where}'}")
   text, toks, tps = generate(model, tok, args.prompt, args.steps)
   print(f"\n{len(toks)} tokens, {tps:.1f} tok/s")
   if not args.float:

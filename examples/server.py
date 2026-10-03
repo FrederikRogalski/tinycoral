@@ -21,25 +21,26 @@ class Engine:
       from coral.codegen import layer as LY
       from coral.tpu import runner
       _, w = LY.load_checkpoint()
-      self.chip = stories_chip.Chip(w, *stories_chip.calibration(w), 256, local=True, tpu=runner().tpu)
+      r = runner()                                     # None with MOCKCORAL=1: then the chip's bit model runs on the host
+      self.chip = stories_chip.Chip(w, *stories_chip.calibration(w), 256, mock=r is None, local=True, tpu=r and r.tpu)
   def chip_generate(self, prompt:str, steps:int, temperature:float):
     """batch 1 on the chip: one TPU call per token runs all 6 layers; the host embeds, classifies and samples"""
     from coral.runtime import TRAFFIC
     from coral.tpu import runner
     r = runner()
-    if r.owner != "chip": self.chip.upload(); r._own("chip")     # its weights fill the tiles: coral.tpu re-uploads its own later
-    rng, toks = np.random.default_rng(), self.tok.encode(prompt)
+    if r is not None and r.owner != "chip": self.chip.upload(); r._own("chip")   # its weights fill the tiles: coral.tpu re-uploads its own later
+    rng, toks, calls = np.random.default_rng(), self.tok.encode(prompt), 0 if self.chip.mock else 1
     toks = toks if toks[:1] == [1] else [1] + toks
     for pos in range(min(len(toks) + steps, self.cfg["max_context"]) - 1):
       t0, out0, in0 = time.perf_counter(), TRAFFIC["to_device"], TRAFFIC["from_device"]
       lg = self.chip.step(toks[pos], pos).astype(np.float64)
       dt = time.perf_counter() - t0
-      if pos + 1 < len(toks): yield dict(pos=pos, deltas=[""], ms=dt * 1e3, tok_s=1 / dt, tpu_calls=1, to_device=TRAFFIC["to_device"] - out0,
+      if pos + 1 < len(toks): yield dict(pos=pos, deltas=[""], ms=dt * 1e3, tok_s=1 / dt, tpu_calls=calls, to_device=TRAFFIC["to_device"] - out0,
                                          from_device=TRAFFIC["from_device"] - in0, done=False); continue
       nxt = int((lg / temperature + rng.gumbel(size=lg.shape)).argmax() if temperature > 0 else lg.argmax())
       done = nxt == 1
       if not done: toks.append(nxt)
-      yield dict(pos=pos, deltas=["" if done else self.tok.decode(toks[-2], toks[-1])], ms=dt * 1e3, tok_s=1 / dt, tpu_calls=1,
+      yield dict(pos=pos, deltas=["" if done else self.tok.decode(toks[-2], toks[-1])], ms=dt * 1e3, tok_s=1 / dt, tpu_calls=calls,
                  to_device=TRAFFIC["to_device"] - out0, from_device=TRAFFIC["from_device"] - in0, done=done)
       if done: break
   def model(self, B:int):
@@ -102,8 +103,8 @@ class Handler(BaseHTTPRequestHandler):
   def do_GET(self):
     if self.path in ("/", "/index.html"): return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
     if self.path.startswith("/api/info"):
-      info = dict(device=Device.DEFAULT, model="TinyStories-15M (llama2.c), uint8 on the Edge TPU", prompts=stories_batch.prompts(256),
-                  chip=ENGINE.chip is not None)
+      info = dict(device=Device.DEFAULT + (" (MOCKCORAL: numpy)" if os.getenv("MOCKCORAL") else ""), model="TinyStories-15M (llama2.c), uint8 on the Edge TPU",
+                  prompts=stories_batch.prompts(256), chip=None if ENGINE.chip is None else "mock" if ENGINE.chip.mock else "chip")
       return self.send(200, json.dumps(info).encode(), "application/json")
     if self.path.startswith("/api/tiles"):
       B = int(self.path.split("B=")[1]) if "B=" in self.path else 1

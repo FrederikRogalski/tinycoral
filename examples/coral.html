@@ -185,6 +185,7 @@ async function loadTiles(B) {
 (async () => {
   const info = await (await fetch("/api/info")).json();
   if (info.chip) document.getElementById("chipmode").style.display = "";
+  if (info.chip === "mock") document.getElementById("chipmode").textContent = "writing: the whole-chip program's bit model, in numpy on the host";
   $("dev").textContent = "device " + info.device; prompts = info.prompts;
   loadTiles(1);
 })();

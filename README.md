@@ -35,6 +35,7 @@ python examples/stories_chip.py                           # one story, batch 1, 
 DEV=CORAL python examples/server.py                       # a web app: write with the model, or watch 256 stories grow at once
 DEV=CORAL CHIP=1 python examples/server.py                # the same, writing with all 6 layers on the chip (one TPU call per token)
 MOCKCORAL=1 DEV=CORAL python examples/stories.py          # without the stick: the TPU's arithmetic in numpy
+MOCKCORAL=1 DEV=CORAL CHIP=1 python examples/server.py    # the web app without the stick: the whole-chip program's bit model in numpy
 ```
 
 ## How a tinygrad model gets onto the Edge TPU
