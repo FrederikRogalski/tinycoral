@@ -2,6 +2,12 @@
 
 tinygrad on the Google Coral USB Accelerator (Edge TPU), with a reverse-engineered instruction set, our own code generator and our own USB driver. A tinygrad model runs on the stick with `DEV=CORAL`: no libedgetpu, no TFLite and no edgetpu_compiler at run time. Google's compiler is used only offline, as the reference our generated programs are checked against byte for byte.
 
+Everything here was written by Claude (Anthropic's model), as agents in Claude Code: the driver, the decoded instruction set, the code generator and the tinygrad backend. A human set the goal, made the calls and replugged the stick when it hung. [`STORY.md`](STORY.md) tells how it went.
+
+<img src="docs/demo.gif" width="400" alt="the web app writing a story with all 6 transformer layers of TinyStories-15M on the Coral, one TPU call per token">
+
+The web app (`DEV=CORAL CHIP=1 python examples/server.py`) writing with the whole transformer on the stick, at real speed. The 47 s video: [YouTube](https://youtube.com/shorts/136F8-ph_hQ) · [X](https://x.com/xlagor_/status/2106501124479959282).
+
 | | Google's stack (edgetpu_compiler + libedgetpu) | tinycoral |
 |---|---|---|
 | MobileNet v1 (Google's program), std clock | 3.96 ms | **3.89 ms**, bit-exact |
@@ -27,6 +33,7 @@ DEV=CORAL python examples/stories_batch.py --batch 256    # 256 TinyStories at o
 DEV=CORAL python examples/stories.py                      # one story, batch 1
 python examples/stories_chip.py                           # one story, batch 1, all 6 layers in one Edge TPU program per token
 DEV=CORAL python examples/server.py                       # a web app: write with the model, or watch 256 stories grow at once
+DEV=CORAL CHIP=1 python examples/server.py                # the same, writing with all 6 layers on the chip (one TPU call per token)
 MOCKCORAL=1 DEV=CORAL python examples/stories.py          # without the stick: the TPU's arithmetic in numpy
 ```
 

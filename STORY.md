@@ -174,3 +174,8 @@ final numbers and how to reproduce them.
   - The bisection that got there found three hardware rules no document mentions: an L2 norm or a streamed matmul leaves a tile's identity row unusable for the next MUL, and a LOGISTIC right after an L2 norm stalls the chip unless the identity is reloaded first, as edgetpu_compiler always does.
   - 21 device runs and 4 stalls, all recovered by the driver without a replug.
   - In a 205-token generation 199 calls matched the bit model exactly. The rest trace to one softmax value 9e-5 below a rounding tie: the scalar core's exp2 is not quite correctly rounded.
+
+## Making the video
+- **The first cut looked like an AI hallucination.** The narration came in separate takes and sounded choppy, and nothing proved the chip did anything. The short now uses one take, the owner's phone footage of the stick and the laptop (and of the unplugging), and captures of the real web app writing on the stick.
+- **The screen recording caught a private window** that was open on the desktop at the time. The web-app captures now come straight from the browser's compositor (CDP screencast): the same pixels, without the desktop.
+- **Gemini as the ear.** Told what to expect, it confirmed every sound effect on its cue (10/10). Blind, it invented effects that aren't there and its timestamps drifted by 2-4 s. So timing and balance are measured instead: the voice is a median 21 dB over the music on every word, and the ducking looks 0.12 s ahead so no word starts under the full bed.

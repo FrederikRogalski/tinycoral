@@ -56,6 +56,7 @@ h3 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--
   <span class="badge on" id="dev">connecting…</span>
   <span class="badge">TinyStories-15M · uint8 on a $60 USB Edge TPU</span>
   <span class="badge">programs: our own code generator · edgetpu_compiler: not used</span>
+  <span class="badge on" id="chipmode" style="display:none">writing: all 6 transformer layers on the TPU · 1 call per token</span>
 </header>
 <main>
   <section class="panel">
@@ -183,6 +184,7 @@ async function loadTiles(B) {
 
 (async () => {
   const info = await (await fetch("/api/info")).json();
+  if (info.chip) document.getElementById("chipmode").style.display = "";
   $("dev").textContent = "device " + info.device; prompts = info.prompts;
   loadTiles(1);
 })();

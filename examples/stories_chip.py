@@ -70,7 +70,7 @@ def programs(Ps:list[int], qm:list[dict], qb:list[dict], pl:list[dict], workers:
 
 class Chip:
   """the model with all 6 layers on the Edge TPU (or, mock=True, the bit model on the host): step(token, pos) -> logits"""
-  def __init__(self, w:dict, qm:list[dict], qb:list[dict], max_pos:int, mock:bool=False, check:str|None=None, local:bool=False):
+  def __init__(self, w:dict, qm:list[dict], qb:list[dict], max_pos:int, mock:bool=False, check:str|None=None, local:bool=False, tpu=None):
     self.w, self.qm, self.qb, self.mock, self.L, self.check, self.bad = w, qm, qb, mock, len(qm), check, []
     self.Ws = LY.quant_weights(w, qm)
     self.Kh = np.zeros((self.L, 6, 256, 48), np.uint8); self.Vh = np.zeros_like(self.Kh)   # the KV cache, head-major (k' in SIGMA order)
@@ -82,11 +82,15 @@ class Chip:
     pl = LY.plan(self.L)
     self.progs = programs(list(range(1, max_pos + 1)), qm, qb, pl, local=local)
     self.exes = {P: LY.model_executables(pc, bss, io)[1] for P, (pc, bss, io) in self.progs.items()}
-    caching = LY.model_executables(*self.progs[1])[0]
-    self.tpu = EdgeTPU()
+    self.caching = LY.model_executables(*self.progs[1])[0]
+    self.tpu = EdgeTPU() if tpu is None else tpu     # (examples/server.py shares coral.tpu's device)
+    self.upload()
+  def upload(self):
+    """the parameters into the tiles' wide memory (6 x 1.07 MB): once, or again after other programs used that memory"""
+    from coral.runtime import run_executable
     st = time.perf_counter()
-    run_executable(self.tpu, caching, parameters=LY.model_params(self.Ws, qm))   # the parameters, once (6 x 1.07 MB)
-    print(f"parameters cached on the chip: {len(LY.model_params(self.Ws, qm)) / 1e6:.2f} MB in {time.perf_counter() - st:.2f} s")
+    run_executable(self.tpu, self.caching, parameters=LY.model_params(self.Ws, self.qm))
+    print(f"parameters cached on the chip: {len(LY.model_params(self.Ws, self.qm)) / 1e6:.2f} MB in {time.perf_counter() - st:.2f} s")
   def quants(self, P:int) -> list[dict]: return self.qb if P == 1 else self.qm
   def step(self, tok:int, pos:int) -> np.ndarray:
     t0, P, q = time.perf_counter(), pos + 1, self.quants(pos + 1)

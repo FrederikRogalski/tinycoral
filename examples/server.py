@@ -1,6 +1,7 @@
 # a little web app for TinyStories-15M on the Coral: write a story together with the model, or watch a batch of stories
 # grow at once; live tokens/s, usb traffic, and where every layer's weights sit in the 16 tiles
 #   DEV=CORAL python examples/server.py [--port 8642]        then open http://localhost:8642
+#   DEV=CORAL CHIP=1 python examples/server.py                writing runs all 6 layers on the chip, one program per token
 import os, sys, json, time, threading, pathlib, argparse, numpy as np
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 os.environ.setdefault("WQKV", "1")
@@ -9,11 +10,38 @@ import stories, stories_batch
 from tinygrad import Tensor, Device, nn, TinyJit, Variable
 
 class Engine:
-  """the models (one per batch size: each keeps its own KV cache and JIT) and the generation loop; one request at a time"""
+  """the models (one per batch size: each keeps its own KV cache and JIT) and the generation loop; one request at a time.
+  CHIP=1: writing (batch 1) runs the whole transformer on the Edge TPU, one program per token (examples/stories_chip.py)"""
   def __init__(self):
     self.cfg, self.weights = stories.load_checkpoint(stories.ROOT / "models/stories15M.bin")
     self.tok = stories.Tokenizer(stories.ROOT / "models/tokenizer.bin", self.cfg["vocab_size"])
-    self.models, self.lock = {}, threading.Lock()
+    self.models, self.lock, self.chip = {}, threading.Lock(), None
+    if os.getenv("CHIP") and Device.DEFAULT == "CORAL":
+      import stories_chip
+      from coral.codegen import layer as LY
+      from coral.tpu import runner
+      _, w = LY.load_checkpoint()
+      self.chip = stories_chip.Chip(w, *stories_chip.calibration(w), 256, local=True, tpu=runner().tpu)
+  def chip_generate(self, prompt:str, steps:int, temperature:float):
+    """batch 1 on the chip: one TPU call per token runs all 6 layers; the host embeds, classifies and samples"""
+    from coral.runtime import TRAFFIC
+    from coral.tpu import runner
+    r = runner()
+    if r.owner != "chip": self.chip.upload(); r._own("chip")     # its weights fill the tiles: coral.tpu re-uploads its own later
+    rng, toks = np.random.default_rng(), self.tok.encode(prompt)
+    toks = toks if toks[:1] == [1] else [1] + toks
+    for pos in range(min(len(toks) + steps, self.cfg["max_context"]) - 1):
+      t0, out0, in0 = time.perf_counter(), TRAFFIC["to_device"], TRAFFIC["from_device"]
+      lg = self.chip.step(toks[pos], pos).astype(np.float64)
+      dt = time.perf_counter() - t0
+      if pos + 1 < len(toks): yield dict(pos=pos, deltas=[""], ms=dt * 1e3, tok_s=1 / dt, tpu_calls=1, to_device=TRAFFIC["to_device"] - out0,
+                                         from_device=TRAFFIC["from_device"] - in0, done=False); continue
+      nxt = int((lg / temperature + rng.gumbel(size=lg.shape)).argmax() if temperature > 0 else lg.argmax())
+      done = nxt == 1
+      if not done: toks.append(nxt)
+      yield dict(pos=pos, deltas=["" if done else self.tok.decode(toks[-2], toks[-1])], ms=dt * 1e3, tok_s=1 / dt, tpu_calls=1,
+                 to_device=TRAFFIC["to_device"] - out0, from_device=TRAFFIC["from_device"] - in0, done=done)
+      if done: break
   def model(self, B:int):
     if B not in self.models:
       m = stories.build(self.cfg, self.weights, nn.Linear, jit=False)
@@ -24,6 +52,7 @@ class Engine:
     return self.models[B]
   def generate(self, prompts:list[str], steps:int, temperature:float):
     """yields one event per decoding step: the new text of every row and the step's stats"""
+    if len(prompts) == 1 and self.chip is not None: yield from self.chip_generate(prompts[0], steps, temperature); return
     from coral import fused
     from coral.runtime import TRAFFIC
     from coral.tpu import runner
@@ -73,7 +102,8 @@ class Handler(BaseHTTPRequestHandler):
   def do_GET(self):
     if self.path in ("/", "/index.html"): return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
     if self.path.startswith("/api/info"):
-      info = dict(device=Device.DEFAULT, model="TinyStories-15M (llama2.c), uint8 on the Edge TPU", prompts=stories_batch.prompts(256))
+      info = dict(device=Device.DEFAULT, model="TinyStories-15M (llama2.c), uint8 on the Edge TPU", prompts=stories_batch.prompts(256),
+                  chip=ENGINE.chip is not None)
       return self.send(200, json.dumps(info).encode(), "application/json")
     if self.path.startswith("/api/tiles"):
       B = int(self.path.split("B=")[1]) if "B=" in self.path else 1
@@ -95,6 +125,6 @@ if __name__ == "__main__":
   ap.add_argument("--port", type=int, default=8642)
   args = ap.parse_args()
   ENGINE = Engine()
-  for B in (1, 64): ENGINE.model(B)               # build (and calibrate) both models before the first request
+  for B in ((64,) if ENGINE.chip else (1, 64)): ENGINE.model(B)   # build (and calibrate) the models before the first request
   print(f"device {Device.DEFAULT}: http://localhost:{args.port}", flush=True)
   ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
