@@ -2,7 +2,7 @@
 
 tinygrad on the Google Coral USB Accelerator (Edge TPU), with a reverse-engineered instruction set, our own code generator and our own USB driver. A tinygrad model runs on the stick with `DEV=CORAL`: no libedgetpu, no TFLite and no edgetpu_compiler at run time. Google's compiler is used only offline, as the reference our generated programs are checked against byte for byte.
 
-Everything here was written by Claude (Anthropic's model), as agents in Claude Code: the driver, the decoded instruction set, the code generator and the tinygrad backend. A human set the goal, made the calls and replugged the stick when it hung. [`STORY.md`](STORY.md) tells how it went.
+Everything here was written by AI agents: the driver, the decoded instruction set, the code generator and the tinygrad backend. A human set the goal, made the calls and replugged the stick when it hung. [`STORY.md`](STORY.md) tells how it went.
 
 <img src="docs/demo.gif" width="400" alt="the web app writing a story with all 6 transformer layers of TinyStories-15M on the Coral, one TPU call per token">
 
@@ -92,7 +92,5 @@ git clone https://github.com/google-coral/libedgetpu ref/libedgetpu      # the U
 - [libedgetpu](https://github.com/google-coral/libedgetpu) (Apache 2.0): the register names (`coral/regs.py` is generated from its headers), the USB firmware the driver uploads (cloned with libedgetpu, not part of this repository), and one crucial comment about USB deadlocks.
 - karpathy's [llama2.c](https://github.com/karpathy/llama2.c): the TinyStories models and tokenizer.
 - [tinygrad](https://github.com/tinygrad/tinygrad).
-
-Written by AI agents (Claude, in Claude Code): the reverse engineering, the driver, the code generator and the tinygrad backend. A human plugged the stick in, replugged it whenever an agent wedged it, and steered. [`STORY.md`](STORY.md) tells how it went.
 
 Not affiliated with or endorsed by Google or tiny corp. MIT license (`LICENSE`).
