@@ -453,3 +453,34 @@ The act pop and infeed classes include the U=1 degenerate form, which has fewer 
   - M = 200.
 
 `python coral/isa/scalar.py --extra` recompiles this set (docker `etpc`; results cached in `.compile/`) with `extra_programs()` and verifies it.
+
+## 11. Running a program N times on one upload (`coral/loop.py`)
+
+The chip cannot replay a finished program: after `halt` the scalar core stops (`currentPc` 0x44028 stays at the last word,
+`scalarCoreRunStatus` 0x44030 = 0), a new input only queues up and the next program dies at its first `pop`. A program that does
+not halt keeps running, so `coral/loop.py` wraps the per-call body in a scalar-core loop and the host sends the instructions once:
+
+```
+start
+movi s_r, N                                  # s_r: a register the program never writes (picked from s31 down)
+L:  sync_init ; scsync_init ; alu x4 ; input phase ; compute ; outputs     # the original words, untouched
+    s_r -= 1 ; p0 = (s_r != 0)
+    branch L                                 # 0x22, 15-bit signed word offset, taken while p0
+sync_final ; scsync_fence ; interrupt ; halt ; nop x4 ; end
+```
+
+Facts measured on the stick (2026-10-19), all bit-exact against the normal path:
+- The body must contain the paired `sync_init` (0x1a, tiles = 0xffff, counters = 0x7ffff: every tile resets its 19 sync counters and
+  signals) and `scsync_init` (0x24, smask = 511, tokwait, tmask = 0xffff: the scalar core waits the 16 tokens and resets its 9
+  counters). Programs whose outputs go through scalar memory leave `SyncCounter_SCALAR_INFEED` (0x44070) and
+  `SyncCounter_RING_OUTFEED` (0x44088) nonzero at the end of the body (196 / 352 for a 640x480 YUV420 detector); without the resets
+  only the first frame is right. Repeating only one of the pair deadlocks the chip (replug). Repeating `sync_final` does not help.
+- Repeated tile `seq` numbers inside the loop are accepted; pop / infeed walks of the staging buffer are relative, so iterations
+  may start at any offset (relu 64 B x1000, 300 KB inputs x20).
+- A body of 15 808 words (branch -15810) runs; the 15-bit offset reaches the whole instruction memory.
+- The instruction memory is physical: 256 KB = 16 384 words (`scMemoryCapacity` 0x44008 = 0x0080_0100_0100_0010: 16 KiB scalar
+  memory, 256 KiB instruction memory in 16-bit fields). A 15 834-word straight-line program runs, a 23 738-word one wedges the chip.
+  Chunk k+1 of a multi-chunk program is accepted only after chunk k has finished: no prefetch, so instruction upload never overlaps
+  compute. Beagle has no instruction base register and no shared-memory partitions (`base_and_bound_unit_size_bytes` = 0).
+- Google's MobileNet v1 (14 114 -> 14 118 words): 3.94 -> 3.43 ms/frame. The saving is the instruction upload, words x 16 B at
+  ~320 MB/s; the per-frame input and output DMAs remain.

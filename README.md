@@ -11,6 +11,7 @@ The web app (`DEV=CORAL CHIP=1 python examples/server.py`) writing with the whol
 | | Google's stack (edgetpu_compiler + libedgetpu) | tinycoral |
 |---|---|---|
 | MobileNet v1 (Google's program), std clock | 3.96 ms | **3.89 ms**, bit-exact |
+| MobileNet v1, the instructions sent once for N frames (`coral/loop.py`) | re-sent every call | **3.43 ms**, bit-exact |
 | one FC layer, 288x288 / 1024x4096 | 0.215 / 0.257 ms | **0.176 / 0.214 ms**, our program |
 | MNIST CNN (tinygrad's beautiful_mnist), uint8 | 2 615 img/s, one image per call | **22 994 img/s**, the whole network as one program, 32 images per call |
 | TinyStories-15M (llama2.c), batch 256 | can't compile it | **1 815 tok/s**, every program ours |
@@ -60,10 +61,11 @@ The model is plain tinygrad. Everything is decided while tinygrad compiles; the 
 | `coral/codegen/eltops.py`, `fused.py` | SOFTMAX (on the scalar core), L2_NORMALIZATION, SUM/MEAN; the FFN block, the on-chip block-argmax classifier and a placement plan for a whole model |
 | `coral/codegen/attention.py`, `attention_block.py`, `layer.py` | attention, a transformer layer's attention block, and all 6 layers of TinyStories-15M as one program per token |
 | `coral/programs.py`, `coral/tpu.py` | the host side of the programs; the runner that keeps every weight matrix resident |
+| `coral/loop.py` | instructions once: a compiled program's body in a scalar-core loop, one upload for N frames (any single-chunk program, Google's or ours) |
 | `coral/ops_coral.py`, `install.py`, `qops.py`, `select.py`, `chain.py` | the tinygrad backend `DEV=CORAL` |
 | `coral/quantize.py`, `fused.py`, `nn.py` | post-training quantization of any tinygrad model; fused blocks as tinygrad layers |
 | `examples/` | MNIST, CIFAR-10, TinyStories (matmuls, fused blocks, the whole transformer on the chip) and the web app |
-| `test/` | `test_codegen*.py`, `test_isa.py`, `test_eltwise.py`, `test_select*.py` run offline; `test_hw_*.py` and `test_mobilenet.py` on the device |
+| `test/` | `test_codegen*.py`, `test_isa.py`, `test_eltwise.py`, `test_select*.py`, `test_loop.py` run offline; `test_hw_*.py`, `test_mobilenet.py` and `test_loop.py --hw` on the device |
 | `bench/` | `RESULTS.md` and the scripts behind it |
 | `tools/` | not needed at run time: edgetpu_compiler in Docker as the oracle (`compiler.py`, `oracle.py`, `tflite_gen.py`, `export.py`, `reloc.py`), the instruction corpus and the FC table (`corpus.py`, `fcgen.py`, `data/`), a single-step tracer (`trace.py`), a runner for hardware tests (`hw.py`) |
 | `docs/ARCHITECTURE.md`, `docs/isa/*.md` | how the chip works, and every decoded instruction |

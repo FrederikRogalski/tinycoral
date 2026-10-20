@@ -28,6 +28,13 @@ The reference behind the code. `docs/ARCHITECTURE.md` explains the chip and `doc
   - Tracing a program with big DMAs while halted wedges the firmware.
   - A USB port reset on a wedged stick makes it vanish until a replug.
 
+
+## Instructions once (`coral/loop.py`)
+- **The chip cannot replay a finished program.** After `halt` the scalar core stops (`currentPc` 0x44028, `scalarCoreRunStatus` 0x44030 = 0); sending a new input without the instructions queues it up and the next program dies at its first `pop`. A program that does not halt keeps running: the body in a scalar-core loop (0x22 backward branch) runs N frames on one upload, bit-exact.
+- **The loop body must start right after `start`**, so the paired `sync_init` / `scsync_init` run every iteration. Programs with scalar-memory outfeeds leave `SyncCounter_SCALAR_INFEED` (0x44070) and `SyncCounter_RING_OUTFEED` (0x44088) nonzero at the end of the body; without the resets only the first frame is right. Repeating only one of the pair deadlocks the chip.
+- **Instruction memory: 16 384 words (256 KB), physical.** `scMemoryCapacity` 0x44008. A 15 834-word program runs, 23 738 words wedge the chip. Chunk k+1 of a multi-chunk program is accepted only when chunk k has finished: no prefetch, instruction upload never overlaps compute. No instruction base register, no partitions: a loop body must fit.
+- **A wedged stick needs more than 10 s unplugged.** After a quick replug the core can still be powered and wedged: it enumerates with firmware (18d1:9302) but every vendor control transfer times out.
+
 ## The chip ("beagle")
 - **Tiles:** 4x4 = 16.
   - Narrow memory (activations) 192 KiB per tile.
